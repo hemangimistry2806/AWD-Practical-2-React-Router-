@@ -43,7 +43,16 @@ npm run dev
 
 ## Screenshots
 
-*Add screenshots of the Home, Projects, Contact, and 404 pages here.*
+<img width="959" height="475" alt="image" src="https://github.com/user-attachments/assets/d2d5b822-308b-45df-9bfd-0231d080cc37" />
+
+
+<img width="956" height="449" alt="image" src="https://github.com/user-attachments/assets/517c4a8a-12fe-4940-ad33-ab94c2edb576" />
+
+
+<img width="956" height="448" alt="image" src="https://github.com/user-attachments/assets/05aca2b0-f899-4367-a365-3b9e410bf617" />
+
+
+
 
 ## About
 
