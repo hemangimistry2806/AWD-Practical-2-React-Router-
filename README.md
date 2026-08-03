@@ -52,8 +52,13 @@ npm run dev
 <img width="956" height="448" alt="image" src="https://github.com/user-attachments/assets/05aca2b0-f899-4367-a365-3b9e410bf617" />
 
 
+<img width="959" height="440" alt="Screenshot 2026-07-27 193922" src="https://github.com/user-attachments/assets/f953d20a-2c2c-4c08-bab2-5c9a3d230270" />
 
 
-## About
+<img width="957" height="411" alt="Screenshot 2026-08-03 213921" src="https://github.com/user-attachments/assets/46d2fd90-f869-4b4e-af39-9fea3fb7ec7b" />
 
-React Practical 2 – State Management and Routing in React
+
+<img width="957" height="411" alt="Screenshot 2026-08-03 213921" src="https://github.com/user-attachments/assets/de44a0f7-c480-4adf-ad3a-b5d21b43944a" />
+
+
+
