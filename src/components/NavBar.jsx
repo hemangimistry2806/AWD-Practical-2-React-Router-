@@ -19,7 +19,15 @@ function NavBar({ isDarkMode, onToggleTheme }) {
       <button className="theme-toggle" onClick={onToggleTheme} type="button">
         {isDarkMode ? "☀️ Light" : "🌙 Dark"}
       </button>
+      <Link
+  to="/tasks"
+  className={`nav-link${isActive("/tasks") ? " active" : ""}`}
+>
+  Tasks
+</Link>
     </nav>
+
+    
   );
 }
 

@@ -1,38 +1,245 @@
+import { useEffect, useState } from "react";
+
+
 function Projects() {
-  const projects = [
-    {
-      title: "Hand Gesture-Controlled Virtual Mouse",
-      summary: "Hand gesture-controlled virtual mouse using OpenCV and MediaPipe for real-time cursor movement and click actions.",
-      tag: "Computer Vision"
-    },
-    {
-      title: "Student Portfolio Website",
-      summary: "A responsive personal portfolio website built with React and Vite to showcase skills, projects, and contact information using reusable components.",
-      tag: "React"
-    },
-    {
-      title: "CNC Machine Data Integration & Real-Time Monitoring System",
-      summary: "AI-powered predictive maintenance system that monitors CNC machine health, detects anomalies, predicts failures, and visualizes machine performance using machine learning.",
-      tag: "AI / ML"
+
+
+  const [repos, setRepos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+
+
+  const fetchRepos = async () => {
+
+    try {
+
+      setLoading(true);
+      setError(null);
+
+
+      const response = await fetch(
+        "https://api.github.com/users/hemangimistry2806/repos?sort=updated&per_page=6"
+      );
+
+
+      if (!response.ok) {
+
+        throw new Error("Unable to fetch GitHub projects");
+
+      }
+
+
+      const data = await response.json();
+
+      setRepos(data);
+
+
+    } 
+    
+    catch(err) {
+
+      setError(err.message);
+
     }
-  ];
+
+
+    finally {
+
+      setLoading(false);
+
+    }
+
+  };
+
+
+
+
+  useEffect(() => {
+
+    fetchRepos();
+
+  }, []);
+
+
+
+
 
   return (
-    <section className="page-card">
-      <h2>My Projects</h2>
-      <p>Here are three of my recent work highlights.</p>
 
-      <div className="project-grid">
-        {projects.map((project) => (
-          <article className="project-card" key={project.title}>
-            <span className="project-badge">{project.tag}</span>
-            <h3>{project.title}</h3>
-            <p>{project.summary}</p>
-          </article>
-        ))}
-      </div>
+    <section className="page-card">
+
+
+      <h2>
+        My GitHub Projects 🚀
+      </h2>
+
+
+
+
+
+      {
+        loading && (
+
+          <p>
+            Loading projects...
+          </p>
+
+        )
+      }
+
+
+
+
+
+
+      {
+        error && (
+
+          <div>
+
+            <p>
+              {error}
+            </p>
+
+
+            <button onClick={fetchRepos}>
+              Retry
+            </button>
+
+
+          </div>
+
+        )
+      }
+
+
+
+
+
+
+
+      {
+        !loading && !error && (
+
+          <div className="project-grid">
+
+
+            {
+              repos.map((repo)=>(
+
+
+                <div
+                  className="project-card"
+                  key={repo.id}
+                >
+
+
+
+
+
+                  <a
+
+                    href={repo.html_url}
+
+                    target="_blank"
+
+                    rel="noreferrer"
+
+                    className="project-title"
+
+                  >
+
+                    <h3>
+
+                      {
+                        repo.name
+                        .replaceAll("-", " ")
+                        .replaceAll("_", " ")
+                      }
+
+                    </h3>
+
+
+                  </a>
+
+
+
+
+
+
+
+                  <p>
+
+                    {
+                      repo.description ||
+                      "A GitHub project developed using modern technologies."
+
+                    }
+
+                  </p>
+
+
+
+
+
+
+
+                  <div className="project-info">
+
+
+                    <span>
+                      ⭐ {repo.stargazers_count}
+                    </span>
+
+
+
+
+
+                    {
+                      repo.language && (
+
+                        <span className="language">
+
+                          {repo.language}
+
+                        </span>
+
+                      )
+
+                    }
+
+
+
+                  </div>
+
+
+
+
+
+                </div>
+
+
+              ))
+            }
+
+
+
+          </div>
+
+
+        )
+      }
+
+
+
+
+
     </section>
+
   );
+
 }
+
 
 export default Projects;

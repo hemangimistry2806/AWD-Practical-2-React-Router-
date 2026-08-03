@@ -6,6 +6,7 @@ import Home from "./pages/Home";
 import Projects from "./pages/Projects";
 import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
+import Tasks from "./Tasks";
 
 function App() {
   const studentName = "Hemangi Mistry";
@@ -26,12 +27,16 @@ function App() {
       />
 
       <main className="page-content">
-        <Routes>
-          <Route path="/" element={<Home studentName={studentName} mySkills={mySkills} />} />
-          <Route path="/projects" element={<Projects />} />
-          <Route path="/contact" element={<Contact studentName={studentName} />} />
-          <Route path="*" element={<NotFound />} />
-        </Routes>
+       <Routes>
+  <Route path="/" element={<Home studentName={studentName} mySkills={mySkills} />} />
+  <Route path="/projects" element={<Projects />} />
+  <Route path="/contact" element={<Contact studentName={studentName} />} />
+
+  
+  <Route path="/tasks" element={<Tasks />} />
+
+  <Route path="*" element={<NotFound />} />
+</Routes>
       </main>
 
       <Footer name={studentName} />

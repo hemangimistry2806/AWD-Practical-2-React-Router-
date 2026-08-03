@@ -1,0 +1,61 @@
+.tasks-container{
+    width:60%;
+    margin:40px auto;
+    font-family:Arial,sans-serif;
+}
+
+.header{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+}
+
+.add-btn{
+    width:45px;
+    height:45px;
+    border:none;
+    border-radius:50%;
+    background:#007bff;
+    color:white;
+    font-size:28px;
+    cursor:pointer;
+}
+
+.input-box{
+    margin:20px 0;
+    display:flex;
+    gap:10px;
+}
+
+.input-box input{
+    flex:1;
+    padding:10px;
+}
+
+.input-box button{
+    padding:10px 20px;
+}
+
+ul{
+    list-style:none;
+    padding:0;
+}
+
+li{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:12px;
+    margin:10px 0;
+    background:#f2f2f2;
+    border-radius:8px;
+}
+
+.delete-btn{
+    border:none;
+    background:red;
+    color:white;
+    padding:6px 10px;
+    border-radius:5px;
+    cursor:pointer;
+}

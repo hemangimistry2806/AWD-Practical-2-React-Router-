@@ -7,7 +7,11 @@ function Header({ name, isDarkMode, onToggleTheme }) {
         <p className="brand-label">Portfolio</p>
         <h1>{name}</h1>
       </div>
-      <NavBar isDarkMode={isDarkMode} onToggleTheme={onToggleTheme} />
+
+      <NavBar
+        isDarkMode={isDarkMode}
+        onToggleTheme={onToggleTheme}
+      />
     </header>
   );
 }
