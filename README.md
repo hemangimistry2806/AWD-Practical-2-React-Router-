@@ -46,6 +46,10 @@ npm run dev
 The `/tasks` page stores tasks in the local MongoDB database `taskdb`, collection `tasks`.
 The default connection is `mongodb://127.0.0.1:27017/taskdb`, so start the MongoDB service before running the project. `npm run dev` starts both the Express API on port `5000` and the React app on port `5173`.
 
+Deleted task audit entries are appended to `logs/task-audit.txt`.
+Authentication creates the MongoDB collections `users` and `activity_logs`. The task API requires a valid signed-in session, and the Activity button shows login, logout, create, update, and delete history.
+The Excel button downloads an Excel-compatible CSV file. The PDF button opens the browser print dialog, where you can choose Save as PDF.
+
 To use another MongoDB instance, copy `.env.example` to `.env` and change `MONGO_URI`.
 
 ## Screenshots
