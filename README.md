@@ -41,6 +41,13 @@ npm install
 npm run dev
 ```
 
+## MongoDB Tasks
+
+The `/tasks` page stores tasks in the local MongoDB database `taskdb`, collection `tasks`.
+The default connection is `mongodb://127.0.0.1:27017/taskdb`, so start the MongoDB service before running the project. `npm run dev` starts both the Express API on port `5000` and the React app on port `5173`.
+
+To use another MongoDB instance, copy `.env.example` to `.env` and change `MONGO_URI`.
+
 ## Screenshots
 
 <img width="959" height="475" alt="image" src="https://github.com/user-attachments/assets/d2d5b822-308b-45df-9bfd-0231d080cc37" />
