@@ -27,27 +27,41 @@ function request(path, options = {}) {
 }
 
 (async () => {
-  const created = await request('/api/tasks', {
+  const email = `verify-${Date.now()}@example.com`;
+  const registered = await request('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username: 'Verifier', email, password: 'secret123' })
+  });
+  fs.appendFileSync('api-verification.log', `REGISTER ${JSON.stringify(registered)}\n`);
+
+  const token = registered.body.token;
+  const authHeaders = { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` };
+
+  const created = await request('/api/tasks', {
+    method: 'POST',
+    headers: authHeaders,
     body: JSON.stringify({ title: 'Verify Mongo persistence' })
   });
   fs.appendFileSync('api-verification.log', `POST ${JSON.stringify(created)}\n`);
 
-  const list = await request('/api/tasks');
+  const list = await request('/api/tasks', { headers: { Authorization: `Bearer ${token}` } });
   fs.appendFileSync('api-verification.log', `GET ${JSON.stringify(list)}\n`);
 
   const id = created.body._id;
   const updated = await request(`/api/tasks/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: authHeaders,
     body: JSON.stringify({ title: 'Updated task' })
   });
   fs.appendFileSync('api-verification.log', `PUT ${JSON.stringify(updated)}\n`);
 
-  const deleted = await request(`/api/tasks/${id}`, { method: 'DELETE' });
+  const deleted = await request(`/api/tasks/${id}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` }
+  });
   fs.appendFileSync('api-verification.log', `DELETE ${JSON.stringify(deleted)}\n`);
 
-  const finalList = await request('/api/tasks');
+  const finalList = await request('/api/tasks', { headers: { Authorization: `Bearer ${token}` } });
   fs.appendFileSync('api-verification.log', `GET_AFTER_DELETE ${JSON.stringify(finalList)}\n`);
 })();

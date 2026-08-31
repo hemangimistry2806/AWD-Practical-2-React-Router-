@@ -1,6 +1,9 @@
-const crypto = require("crypto");
+require("dotenv").config();
+
+const bcrypt = require("bcryptjs");
 const express = require("express");
 const fs = require("fs");
+const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const path = require("path");
 const ActivityLog = require("./models/ActivityLog.cjs");
@@ -10,9 +13,9 @@ const User = require("./models/User.cjs");
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/taskdb";
+const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-this-secret";
 const LOG_DIRECTORY = path.join(__dirname, "..", "..", "logs");
 const LOG_FILE = path.join(LOG_DIRECTORY, "task-audit.txt");
-const SESSION_DURATION_MS = 1000 * 60 * 60 * 24;
 
 fs.mkdirSync(LOG_DIRECTORY, { recursive: true });
 
@@ -29,41 +32,6 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-
-const hashPassword = (password, salt) => new Promise((resolve, reject) => {
-    crypto.scrypt(password, salt, 64, (error, derivedKey) => {
-        if (error) {
-            reject(error);
-            return;
-        }
-
-        resolve(derivedKey.toString("hex"));
-    });
-});
-
-const verifyPassword = async (password, user) => {
-    const passwordHash = await hashPassword(password, user.passwordSalt);
-    const expected = Buffer.from(user.passwordHash, "hex");
-    const actual = Buffer.from(passwordHash, "hex");
-
-    return expected.length === actual.length && crypto.timingSafeEqual(expected, actual);
-};
-
-const hashToken = (token) => crypto.createHash("sha256").update(token).digest("hex");
-
-const createSession = async (user) => {
-    const token = crypto.randomBytes(32).toString("hex");
-    const now = new Date();
-
-    user.sessions = (user.sessions || []).filter((session) => session.expiresAt > now);
-    user.sessions.push({
-        tokenHash: hashToken(token),
-        expiresAt: new Date(Date.now() + SESSION_DURATION_MS)
-    });
-    await user.save();
-
-    return token;
-};
 
 const publicUser = (user) => ({
     id: user._id.toString(),
@@ -110,20 +78,30 @@ const requireAuth = async (req, res, next) => {
             return res.status(401).json({ message: "Authentication required" });
         }
 
-        const tokenHash = hashToken(token);
-        const user = await User.findOne({ "sessions.tokenHash": tokenHash });
-        const session = user?.sessions.find((item) => item.tokenHash === tokenHash);
+        const decoded = jwt.verify(token, JWT_SECRET);
+        const user = await User.findById(decoded.id);
 
-        if (!user || !session || session.expiresAt <= new Date()) {
-            return res.status(401).json({ message: "Session expired. Please log in again." });
+        if (!user) {
+            return res.status(401).json({ message: "User account no longer exists" });
         }
 
         req.user = user;
-        req.authTokenHash = tokenHash;
+        req.token = decoded;
         next();
     } catch (error) {
-        res.status(401).json({ message: "Unable to authenticate request" });
+        res.status(401).json({ message: "Token missing, invalid, or expired" });
     }
+};
+
+const validateTask = (req, res, next) => {
+    const title = String(req.body.title || "").trim();
+
+    if (!title) {
+        return res.status(400).json({ message: "Task title is required" });
+    }
+
+    req.body.title = title;
+    next();
 };
 
 app.get("/api/health", (req, res) => {
@@ -149,10 +127,9 @@ app.post("/api/auth/register", async (req, res) => {
             return res.status(409).json({ message: "An account with this email already exists" });
         }
 
-        const passwordSalt = crypto.randomBytes(16).toString("hex");
-        const passwordHash = await hashPassword(password, passwordSalt);
-        const user = await User.create({ username, email, passwordHash, passwordSalt });
-        const token = await createSession(user);
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const user = await User.create({ username, email, password: hashedPassword });
+        const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
 
         await recordActivity({ req, user, action: "AUTH_REGISTER", details: "Account created" });
         res.status(201).json({ token, user: publicUser(user) });
@@ -167,14 +144,14 @@ app.post("/api/auth/login", async (req, res) => {
 
     try {
         const user = await User.findOne({ email });
-        const validPassword = user ? await verifyPassword(password, user) : false;
+        const validPassword = user ? await bcrypt.compare(password, user.password) : false;
 
         if (!user || !validPassword) {
             await recordActivity({ req, action: "AUTH_LOGIN_FAILED", userEmail: email, details: "Invalid credentials" });
             return res.status(401).json({ message: "Invalid email or password" });
         }
 
-        const token = await createSession(user);
+        const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
         await recordActivity({ req, user, action: "AUTH_LOGIN", details: "Successful login" });
         res.json({ token, user: publicUser(user) });
     } catch (error) {
@@ -187,8 +164,6 @@ app.get("/api/auth/me", requireAuth, (req, res) => {
 });
 
 app.post("/api/auth/logout", requireAuth, async (req, res) => {
-    req.user.sessions = req.user.sessions.filter((session) => session.tokenHash !== req.authTokenHash);
-    await req.user.save();
     await recordActivity({ req, user: req.user, action: "AUTH_LOGOUT", details: "Successful logout" });
     res.json({ message: "Logged out" });
 });
@@ -202,14 +177,10 @@ app.get("/api/tasks", requireAuth, async (req, res) => {
     }
 });
 
-app.post("/api/tasks", requireAuth, async (req, res) => {
+app.post("/api/tasks", requireAuth, validateTask, async (req, res) => {
     try {
-        const title = req.body.title?.trim();
+        const title = req.body.title;
         const status = req.body.status || "pending";
-
-        if (!title) {
-            return res.status(400).json({ message: "Task title is required" });
-        }
 
         const task = await Task.create({
             title,
@@ -232,14 +203,10 @@ app.post("/api/tasks", requireAuth, async (req, res) => {
     }
 });
 
-app.put("/api/tasks/:id", requireAuth, async (req, res) => {
+app.put("/api/tasks/:id", requireAuth, validateTask, async (req, res) => {
     try {
-        const title = req.body.title?.trim();
+        const title = req.body.title;
         const status = req.body.status || "pending";
-
-        if (!title) {
-            return res.status(400).json({ message: "Task title is required" });
-        }
 
         const task = await Task.findByIdAndUpdate(
             req.params.id,
