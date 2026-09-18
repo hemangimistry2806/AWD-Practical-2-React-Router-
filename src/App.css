@@ -108,6 +108,16 @@
   gap: 24px;
 }
 
+.page-loading {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text-muted);
+  padding: 24px;
+  text-align: center;
+  box-shadow: var(--shadow-sm);
+}
+
 .page-card,
 .about,
 .skills,

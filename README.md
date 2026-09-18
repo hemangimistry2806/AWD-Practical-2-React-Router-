@@ -52,6 +52,111 @@ The Excel button downloads an Excel-compatible CSV file. The PDF button opens th
 
 To use another MongoDB instance, copy `.env.example` to `.env` and change `MONGO_URI`.
 
+## Practical 8: Performance Optimization and Lazy Loading
+
+### Objective
+
+Implement route-based code splitting in the existing React Task Management application using `React.lazy()` and `Suspense`, without changing existing functionality, backend APIs, database logic, or UI design.
+
+### What Was Changed
+
+* `Projects` route is lazy-loaded.
+* `Contact` route is lazy-loaded.
+* `Tasks` route is lazy-loaded as one additional heavier component because it contains authentication flow, API requests, SweetAlert dialogs, filtering, CSV/PDF actions, and activity log rendering.
+* The existing `<Routes>` section is wrapped in `<Suspense>`.
+* A simple `Loading page...` fallback UI is displayed while a lazy route chunk is loading.
+
+### React.lazy()
+
+`React.lazy()` lets React load a component only when it is needed. Instead of importing all route components in the first JavaScript bundle, the route component is imported dynamically:
+
+```jsx
+const Projects = lazy(() => import("./pages/Projects"));
+```
+
+This allows Vite to create a separate JavaScript chunk for that route.
+
+### Suspense
+
+`Suspense` shows fallback UI while the lazy-loaded component is being downloaded and prepared:
+
+```jsx
+<Suspense fallback={<div className="page-loading">Loading page...</div>}>
+  <Routes>
+    ...
+  </Routes>
+</Suspense>
+```
+
+### Why Lazy Loading Improves Performance
+
+Lazy loading reduces the amount of JavaScript needed during the first page load. The browser can load the initial page sooner, and route code for pages like Projects, Contact, and Tasks is downloaded only when the user visits those routes. This improves initial load performance and perceived speed, especially on slower networks.
+
+### Initial Bundle vs Lazy-Loaded Chunks
+
+Before lazy loading, route components imported normally in `App.jsx` are included in the initial application bundle. After lazy loading, Vite can generate separate chunk files for lazy routes. The initial bundle should not contain the complete Projects, Contact, or Tasks route code.
+
+### Before/After Metrics
+
+No baseline measurements were already present in the repository, so the table below is provided for manual measurement instead of using fabricated numbers.
+
+| Metric                 | Before | After |
+| ---------------------- | -----: | ----: |
+| Initial JS transferred |        |       |
+| Main bundle size       |        |       |
+| Projects chunk         |        |       |
+| Contact chunk          |        |       |
+| Tasks chunk            |        |       |
+| Initial page load time |        |       |
+| Projects route load    |        |       |
+| Contact route load     |        |       |
+| Tasks route load       |        |       |
+
+### How to Get Metrics
+
+1. Run `npm run build` and note the JavaScript files listed in the build output.
+2. Open the app in the browser and open DevTools.
+3. Go to the Network tab and filter by JS.
+4. Reload the home page and record the initial JavaScript transferred.
+5. Navigate to `/projects`, `/contact`, and `/tasks`.
+6. Record the lazy chunk downloaded for each route.
+7. Use DevTools throttling such as Slow 3G to observe the `Loading page...` fallback.
+
+### DevTools Verification
+
+To verify lazy loading:
+
+* Open Browser DevTools.
+* Go to Network.
+* Enable Disable cache while DevTools is open.
+* Load `/` first and confirm that Projects, Contact, and Tasks chunks are not loaded initially.
+* Navigate to `/projects` and confirm that the Projects chunk loads.
+* Navigate to `/contact` and confirm that the Contact chunk loads.
+* Navigate to `/tasks` and confirm that the Tasks chunk loads.
+* Refresh each route directly to confirm the existing Vite/React Router setup still serves the app correctly.
+
+### Slow 3G Fallback Testing
+
+In DevTools Network throttling, select Slow 3G and navigate to a lazy route. The fallback text `Loading page...` should appear briefly while the route chunk downloads.
+
+### Additional Lazy-Loaded Component
+
+The additional lazy-loaded component is `Tasks`. It is a suitable candidate because it is larger than the portfolio pages and includes task authentication, API communication, task list rendering, filtering, export actions, and activity log UI. No artificial heavy dependency was added.
+
+### React DevTools Profiler Observation
+
+Actual React DevTools profiling was not performed in this environment, so no runtime profiler result is claimed. By code inspection, `Tasks` has a realistic unnecessary re-render risk: the status tab counts call `tasks.filter(...)` during render for every status tab. When unrelated local state changes, such as typing in the task editor or toggling the input form, these counts are recalculated even though the `tasks` array may not have changed.
+
+A possible optimization is to use `useMemo` to derive status counts from `tasks`, or split the tab list into a memoized child component. Memoization was not added blindly because the assignment asks to identify the issue without changing unrelated behavior unnecessarily.
+
+### Errors or Issues Encountered
+
+No code issue required backend, database, authentication, or API changes. Baseline performance numbers were not available, so placeholders are documented for manual measurement.
+
+### Conclusion
+
+Practical 8 was implemented by adding route-based code splitting with `React.lazy()` and `Suspense`. The Projects, Contact, and Tasks route code can now be loaded separately, reducing initial bundle work while preserving the existing application behavior.
+
 ## Screenshots
 
 <img width="959" height="475" alt="image" src="https://github.com/user-attachments/assets/d2d5b822-308b-45df-9bfd-0231d080cc37" />

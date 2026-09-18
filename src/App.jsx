@@ -1,12 +1,13 @@
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 import Home from "./pages/Home";
-import Projects from "./pages/Projects";
-import Contact from "./pages/Contact";
 import NotFound from "./pages/NotFound";
-import Tasks from "./Tasks";
+
+const Projects = lazy(() => import("./pages/Projects"));
+const Contact = lazy(() => import("./pages/Contact"));
+const Tasks = lazy(() => import("./Tasks"));
 
 function App() {
   const studentName = "Hemangi Mistry";
@@ -27,16 +28,17 @@ function App() {
       />
 
       <main className="page-content">
-       <Routes>
-  <Route path="/" element={<Home studentName={studentName} mySkills={mySkills} />} />
-  <Route path="/projects" element={<Projects />} />
-  <Route path="/contact" element={<Contact studentName={studentName} />} />
+        <Suspense fallback={<div className="page-loading">Loading page...</div>}>
+          <Routes>
+            <Route path="/" element={<Home studentName={studentName} mySkills={mySkills} />} />
+            <Route path="/projects" element={<Projects />} />
+            <Route path="/contact" element={<Contact studentName={studentName} />} />
 
-  
-  <Route path="/tasks" element={<Tasks />} />
+            <Route path="/tasks" element={<Tasks />} />
 
-  <Route path="*" element={<NotFound />} />
-</Routes>
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </Suspense>
       </main>
 
       <Footer name={studentName} />
