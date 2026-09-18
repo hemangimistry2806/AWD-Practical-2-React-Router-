@@ -6,6 +6,7 @@ const fs = require("fs");
 const jwt = require("jsonwebtoken");
 const mongoose = require("mongoose");
 const path = require("path");
+const { MongoMemoryServer } = require("mongodb-memory-server");
 const ActivityLog = require("./models/ActivityLog.cjs");
 const Task = require("./models/Task.cjs");
 const User = require("./models/User.cjs");
@@ -16,6 +17,7 @@ const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/taskdb";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-this-secret";
 const LOG_DIRECTORY = path.join(__dirname, "..", "..", "logs");
 const LOG_FILE = path.join(LOG_DIRECTORY, "task-audit.txt");
+let memoryMongo;
 
 fs.mkdirSync(LOG_DIRECTORY, { recursive: true });
 
@@ -303,20 +305,29 @@ const startServer = () => {
 };
 
 const connectToDatabase = async () => {
-    await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 3000 });
-    console.log(`MongoDB connected: ${mongoose.connection.name}`);
+    try {
+        await mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 3000 });
+        console.log(`MongoDB connected: ${mongoose.connection.name}`);
+    } catch (error) {
+        console.log(`Local MongoDB unavailable (${error.message}). Starting in-memory MongoDB...`);
+        memoryMongo = await MongoMemoryServer.create();
+        await mongoose.connect(memoryMongo.getUri("taskdb"));
+        console.log(`In-memory MongoDB connected: ${mongoose.connection.name}`);
+    }
 };
 
 connectToDatabase()
     .then(() => startServer())
     .catch((error) => {
         console.error(`MongoDB connection failed: ${error.message}`);
-        console.error(`Check MONGO_URI (${MONGO_URI}) and make sure MongoDB is running.`);
         process.exitCode = 1;
     });
 
 const shutdown = async () => {
     await mongoose.disconnect();
+    if (memoryMongo) {
+        await memoryMongo.stop();
+    }
     process.exit(0);
 };
 
