@@ -39,7 +39,8 @@ app.use(express.json());
 const publicUser = (user) => ({
     id: user._id.toString(),
     username: user.username,
-    email: user.email
+    email: user.email,
+    role: user.role || "user"
 });
 
 const recordActivity = async ({ req, user, action, userEmail, taskId, taskTitle, details }) => {
@@ -94,6 +95,54 @@ const requireAuth = async (req, res, next) => {
     } catch (error) {
         res.status(401).json({ message: "Token missing, invalid, or expired" });
     }
+};
+
+const requireAdmin = (req, res, next) => {
+    if (req.user.role !== "admin") {
+        return res.status(403).json({ message: "Administrator access required" });
+    }
+
+    next();
+};
+
+const parseReportDateRange = (req, res, next) => {
+    const { startDate, endDate } = req.query;
+    const isCalendarDate = (value) => (
+        typeof value === "string"
+        && /^\d{4}-\d{2}-\d{2}$/.test(value)
+        && !Number.isNaN(Date.parse(`${value}T00:00:00.000Z`))
+        && new Date(`${value}T00:00:00.000Z`).toISOString().slice(0, 10) === value
+    );
+
+    if (!isCalendarDate(startDate) || !isCalendarDate(endDate)) {
+        return res.status(400).json({ message: "Valid startDate and endDate are required in YYYY-MM-DD format" });
+    }
+    if (startDate > endDate) {
+        return res.status(400).json({ message: "Start date must not be later than end date" });
+    }
+
+    const endExclusive = new Date(`${endDate}T00:00:00.000Z`);
+    endExclusive.setUTCDate(endExclusive.getUTCDate() + 1);
+    req.reportDateRange = {
+        startDate,
+        endDate,
+        query: {
+            createdAt: {
+                $gte: new Date(`${startDate}T00:00:00.000Z`),
+                $lt: endExclusive
+            }
+        }
+    };
+    next();
+};
+
+const parseReportPage = (req, res, next) => {
+    const rawPage = req.query.page === undefined ? "1" : String(req.query.page);
+    if (!/^[1-9]\d*$/.test(rawPage)) {
+        return res.status(400).json({ message: "Page must be a positive integer" });
+    }
+    req.reportPage = Number(rawPage);
+    next();
 };
 
 const validateTask = (req, res, next) => {
@@ -285,6 +334,91 @@ app.get("/api/activity-logs", requireAuth, async (req, res) => {
     }
 });
 
+app.get(
+    "/api/admin/reports/activity",
+    requireAuth,
+    requireAdmin,
+    parseReportDateRange,
+    parseReportPage,
+    async (req, res) => {
+        const pageSize = 50;
+        const { query, startDate, endDate } = req.reportDateRange;
+        const skip = (req.reportPage - 1) * pageSize;
+
+        try {
+            const [total, actionTotals, records] = await Promise.all([
+                ActivityLog.countDocuments(query),
+                ActivityLog.aggregate([
+                    { $match: query },
+                    { $group: { _id: "$action", count: { $sum: 1 } } },
+                    { $sort: { _id: 1 } }
+                ]),
+                ActivityLog.find(query)
+                    .select("action userName taskTitle details createdAt")
+                    .sort({ createdAt: 1, _id: 1 })
+                    .skip(skip)
+                    .limit(pageSize)
+                    .lean()
+            ]);
+
+            res.json({
+                startDate,
+                endDate,
+                total,
+                page: req.reportPage,
+                pageSize,
+                totalPages: Math.ceil(total / pageSize),
+                actionTotals: actionTotals.map(({ _id, count }) => ({ action: _id, count })),
+                records
+            });
+        } catch (error) {
+            console.error(`Activity report query failed: ${error.message}`);
+            res.status(500).json({ message: "Unable to generate activity report" });
+        }
+    }
+);
+
+app.get(
+    "/api/admin/reports/activity.csv",
+    requireAuth,
+    requireAdmin,
+    parseReportDateRange,
+    async (req, res) => {
+        const { query, startDate, endDate } = req.reportDateRange;
+        const csvCell = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+        const columns = ["Created (UTC)", "Action", "User", "Task", "Details"];
+
+        try {
+            res.attachment(`activity-report-${startDate}-to-${endDate}.csv`);
+            res.type("text/csv; charset=utf-8");
+            res.write(`${columns.map(csvCell).join(",")}\r\n`);
+
+            const cursor = ActivityLog.find(query)
+                .select("action userName taskTitle details createdAt")
+                .sort({ createdAt: 1, _id: 1 })
+                .lean()
+                .cursor();
+
+            for await (const record of cursor) {
+                res.write([
+                    record.createdAt.toISOString(),
+                    record.action,
+                    record.userName,
+                    record.taskTitle,
+                    record.details
+                ].map(csvCell).join(",") + "\r\n");
+            }
+            res.end();
+        } catch (error) {
+            console.error(`Activity report export failed: ${error.message}`);
+            if (!res.headersSent) {
+                return res.status(500).json({ message: "Unable to export activity report" });
+            }
+            res.destroy(error);
+        }
+    }
+);
+
 app.get("/api/audit-logs", requireAuth, async (req, res) => {
     try {
         const logs = await fs.promises.readFile(LOG_FILE, "utf8");
@@ -318,20 +452,24 @@ const connectToDatabase = async () => {
     }
 };
 
-connectToDatabase()
-    .then(() => startServer())
-    .catch((error) => {
-        console.error(`MongoDB connection failed: ${error.message}`);
-        process.exitCode = 1;
-    });
+if (require.main === module) {
+    connectToDatabase()
+        .then(() => startServer())
+        .catch((error) => {
+            console.error(`MongoDB connection failed: ${error.message}`);
+            process.exitCode = 1;
+        });
 
-const shutdown = async () => {
-    await mongoose.disconnect();
-    if (memoryMongo) {
-        await memoryMongo.stop();
-    }
-    process.exit(0);
-};
+    const shutdown = async () => {
+        await mongoose.disconnect();
+        if (memoryMongo) {
+            await memoryMongo.stop();
+        }
+        process.exit(0);
+    };
 
-process.on("SIGINT", shutdown);
-process.on("SIGTERM", shutdown);
+    process.on("SIGINT", shutdown);
+    process.on("SIGTERM", shutdown);
+}
+
+module.exports = { app };
