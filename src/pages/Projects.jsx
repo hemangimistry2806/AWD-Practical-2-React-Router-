@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 
 function Projects() {
@@ -10,7 +10,7 @@ function Projects() {
 
 
 
-  const fetchRepos = async () => {
+  const fetchRepos = useCallback(async () => {
 
     try {
 
@@ -35,9 +35,9 @@ function Projects() {
       setRepos(data);
 
 
-    } 
-    
-    catch(err) {
+    }
+
+    catch (err) {
 
       setError(err.message);
 
@@ -50,17 +50,21 @@ function Projects() {
 
     }
 
-  };
+  }, []);
+
 
 
 
 
   useEffect(() => {
 
-    fetchRepos();
+    const timer = window.setTimeout(() => {
+      void fetchRepos();
+    }, 0);
 
-  }, []);
+    return () => window.clearTimeout(timer);
 
+  }, [fetchRepos]);
 
 
 

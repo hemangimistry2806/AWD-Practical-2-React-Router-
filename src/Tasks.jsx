@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import "./Task.css";
@@ -7,11 +7,14 @@ const API_URL = "/api";
 const TOKEN_KEY = "taskAuthToken";
 const STATUS_OPTIONS = [
   { value: "pending", label: "Pending" },
-  { value: "in-progress", label: "In progress" },
+  { value: "ongoing", label: "Ongoing" },
   { value: "completed", label: "Completed" }
 ];
 
-const getTaskStatus = (task) => task.status || (task.completed ? "completed" : "pending");
+const getTaskStatus = (task) => {
+  if (task.status === "in-progress") return "ongoing";
+  return task.status || (task.completed ? "completed" : "pending");
+};
 
 const getResponseMessage = async (response, fallback) => {
   const data = await response.json().catch(() => ({}));
@@ -23,13 +26,14 @@ function Tasks() {
   const [authUser, setAuthUser] = useState(null);
   const [authMode, setAuthMode] = useState("login");
   const [authForm, setAuthForm] = useState({ username: "", email: "", password: "" });
-  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [checkingAuth, setCheckingAuth] = useState(() => Boolean(localStorage.getItem(TOKEN_KEY)));
   const [authLoading, setAuthLoading] = useState(false);
   const [tasks, setTasks] = useState([]);
-  const [activeTab, setActiveTab] = useState("all");
   const [showInput, setShowInput] = useState(false);
   const [task, setTask] = useState("");
   const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [dueDate, setDueDate] = useState("");
   const [taskStatus, setTaskStatus] = useState("pending");
   const [editingId, setEditingId] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -37,14 +41,14 @@ function Tasks() {
   const [activityLogs, setActivityLogs] = useState([]);
   const [showActivity, setShowActivity] = useState(false);
 
-  const clearAuth = () => {
+  const clearAuth = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY);
     setToken(null);
     setAuthUser(null);
     setTasks([]);
-  };
+  }, []);
 
-  const requestApi = async (url, options = {}) => {
+  const requestApi = useCallback(async (url, options = {}) => {
     const headers = { ...(options.headers || {}) };
 
     if (options.body && !headers["Content-Type"]) {
@@ -56,11 +60,10 @@ function Tasks() {
     }
 
     return fetch(url, { ...options, headers });
-  };
+  }, [token]);
 
   useEffect(() => {
     if (!token) {
-      setCheckingAuth(false);
       return undefined;
     }
 
@@ -91,13 +94,13 @@ function Tasks() {
       }
     };
 
-    checkSession();
+    void checkSession();
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [clearAuth, token]);
 
-  const fetchTasks = async () => {
+  const fetchTasks = useCallback(async () => {
     try {
       setLoading(true);
       setError("");
@@ -118,13 +121,19 @@ function Tasks() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [clearAuth, requestApi]);
 
   useEffect(() => {
-    if (authUser) {
-      fetchTasks();
+    if (!authUser) {
+      return undefined;
     }
-  }, [authUser]);
+
+    const timer = window.setTimeout(() => {
+      void fetchTasks();
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, [authUser, fetchTasks]);
 
   const handleAuthSubmit = async (event) => {
     event.preventDefault();
@@ -197,7 +206,7 @@ function Tasks() {
       const url = wasEditing ? `${API_URL}/tasks/${editingId}` : `${API_URL}/tasks`;
       const response = await requestApi(url, {
         method,
-        body: JSON.stringify({ title, description, status: taskStatus })
+        body: JSON.stringify({ title, description, priority, dueDate, status: taskStatus })
       });
 
       if (!response.ok) {
@@ -206,6 +215,8 @@ function Tasks() {
 
       setTask("");
       setDescription("");
+      setPriority("medium");
+      setDueDate("");
       setTaskStatus("pending");
       setEditingId(null);
       setShowInput(false);
@@ -252,6 +263,8 @@ function Tasks() {
   const editTask = (currentTask) => {
     setTask(currentTask.title);
     setDescription(currentTask.description || "");
+    setPriority(currentTask.priority || "medium");
+    setDueDate(currentTask.dueDate ? currentTask.dueDate.slice(0, 10) : "");
     setTaskStatus(getTaskStatus(currentTask));
     setEditingId(currentTask._id);
     setShowInput(true);
@@ -280,19 +293,21 @@ function Tasks() {
     URL.revokeObjectURL(url);
   };
 
-  const visibleTasks = useMemo(() => (
-    activeTab === "all"
-      ? tasks
-      : tasks.filter((currentTask) => getTaskStatus(currentTask) === activeTab)
-  ), [activeTab, tasks]);
+  const taskGroups = useMemo(() => STATUS_OPTIONS.map(({ value, label }) => ({
+    value,
+    label,
+    tasks: tasks.filter((currentTask) => getTaskStatus(currentTask) === value)
+  })), [tasks]);
 
   const downloadExcel = () => {
     const escapeCsv = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
-      ["Title", "Description", "Status", "Created"],
-      ...visibleTasks.map((currentTask) => [
+      ["Title", "Description", "Priority", "Due date", "Status", "Created"],
+      ...tasks.map((currentTask) => [
         currentTask.title,
         currentTask.description,
+        currentTask.priority,
+        currentTask.dueDate ? new Date(currentTask.dueDate).toLocaleDateString() : "",
         getTaskStatus(currentTask),
         new Date(currentTask.createdAt).toLocaleString()
       ])
@@ -372,6 +387,7 @@ function Tasks() {
           >
             {authMode === "login" ? "Need an account? Register" : "Already registered? Sign in"}
           </button>
+          {authMode === "login" && <Link className="text-button" to="/forgot-password">Forgot Password?</Link>}
           {error && <p className="task-error">{error}</p>}
         </form>
       </section>
@@ -385,8 +401,8 @@ function Tasks() {
           <p className="eyebrow">Signed in as {authUser.username}</p>
           <h2>My Tasks</h2>
         </div>
-          {authUser.role === "admin" && <Link className="secondary-task-button" to="/admin/reports">Admin reports</Link>}
         <div className="task-actions">
+          {authUser.role === "admin" && <Link className="secondary-task-button" to="/admin/reports">Admin reports</Link>}
           <button className="secondary-task-button" onClick={fetchActivityLogs}>Activity</button>
           <button className="secondary-task-button" onClick={downloadExcel}>Excel</button>
           <button className="secondary-task-button" onClick={downloadPdf}>PDF</button>
@@ -395,27 +411,14 @@ function Tasks() {
             setEditingId(null);
             setTask("");
             setDescription("");
+            setPriority("medium");
+            setDueDate("");
             setTaskStatus("pending");
           }}>
             {showInput ? "Close" : "Add task"}
           </button>
           <button className="text-button" onClick={logout}>Log out</button>
         </div>
-      </div>
-
-      <div className="status-tabs" role="tablist" aria-label="Task status">
-        {[{ value: "all", label: "All" }, ...STATUS_OPTIONS].map((tab) => (
-          <button
-            key={tab.value}
-            className={activeTab === tab.value ? "status-tab active" : "status-tab"}
-            onClick={() => setActiveTab(tab.value)}
-            role="tab"
-            aria-selected={activeTab === tab.value}
-          >
-            {tab.label}
-            <span>{tab.value === "all" ? tasks.length : tasks.filter((currentTask) => getTaskStatus(currentTask) === tab.value).length}</span>
-          </button>
-        ))}
       </div>
 
       {showInput && (
@@ -432,6 +435,12 @@ function Tasks() {
             value={description}
             onChange={(event) => setDescription(event.target.value)}
           />
+          <select value={priority} onChange={(event) => setPriority(event.target.value)}>
+            <option value="low">Low priority</option>
+            <option value="medium">Medium priority</option>
+            <option value="high">High priority</option>
+          </select>
+          <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} />
           <select value={taskStatus} onChange={(event) => setTaskStatus(event.target.value)}>
             {STATUS_OPTIONS.map((status) => <option key={status.value} value={status.value}>{status.label}</option>)}
           </select>
@@ -442,25 +451,28 @@ function Tasks() {
       {loading && <p>Loading tasks...</p>}
       {error && <p className="task-error">{error}</p>}
 
-      <ul className="task-list">
-        {visibleTasks.map((currentTask) => (
-          <li className="task-row" key={currentTask._id}>
-            <div className="task-details">
-              <strong>{currentTask.title}</strong>
-              {currentTask.description && <span>{currentTask.description}</span>}
-            </div>
-            <span className={`task-status ${getTaskStatus(currentTask)}`}>
-              {STATUS_OPTIONS.find((status) => status.value === getTaskStatus(currentTask))?.label}
-            </span>
-            <div className="task-row-actions">
-              <button className="icon-task-button" onClick={() => editTask(currentTask)} title="Edit task">Edit</button>
-              <button className="icon-task-button danger" onClick={() => deleteTask(currentTask)} title="Delete task">Delete</button>
-            </div>
-          </li>
-        ))}
-      </ul>
+      {taskGroups.map((group) => (
+        <section className="task-group" key={group.value}>
+          <h3>{group.label} ({group.tasks.length})</h3>
+          <ul className="task-list">
+            {group.tasks.map((currentTask) => (
+              <li className="task-row" key={currentTask._id}>
+                <div className="task-details">
+                  <strong>{currentTask.title}</strong>
+                  {currentTask.description && <span>{currentTask.description}</span>}
+                </div>
+                <span className={`task-status ${getTaskStatus(currentTask)}`}>{group.label}</span>
+                <div className="task-row-actions">
+                  <button className="icon-task-button" onClick={() => editTask(currentTask)} title="Edit task">Edit</button>
+                  <button className="icon-task-button danger" onClick={() => deleteTask(currentTask)} title="Delete task">Delete</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ))}
 
-      {!loading && visibleTasks.length === 0 && <p className="empty-tasks">No tasks in this view.</p>}
+      {!loading && tasks.length === 0 && <p className="empty-tasks">No tasks yet.</p>}
 
       {showActivity && (
         <section className="activity-panel">

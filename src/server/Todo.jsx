@@ -1,4 +1,4 @@
-const express = require("express");
+import express from "express";
 
 const app = express();
 const PORT = 5000;
@@ -145,7 +145,7 @@ app.use((req, res) => {
 
 
 // Global Error Handler
-app.use((err, req, res, next) => {
+app.use((err, req, res) => {
 
   console.error(err);
 
