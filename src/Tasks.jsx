@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import Swal from "sweetalert2";
 import "./Task.css";
 
@@ -384,6 +385,7 @@ function Tasks() {
           <p className="eyebrow">Signed in as {authUser.username}</p>
           <h2>My Tasks</h2>
         </div>
+          {authUser.role === "admin" && <Link className="secondary-task-button" to="/admin/reports">Admin reports</Link>}
         <div className="task-actions">
           <button className="secondary-task-button" onClick={fetchActivityLogs}>Activity</button>
           <button className="secondary-task-button" onClick={downloadExcel}>Excel</button>

@@ -79,6 +79,19 @@ npm run dev
 
 The API runs on port `5000` and Vite runs on port `5173`. Task-created, task-completed, task-pending transition, login, and logout notifications are sent asynchronously. Pending notifications are sent only when a task changes into `pending`, avoiding duplicate notifications for repeated pending updates.
 
+### Administrator activity reports
+
+The `/admin/reports` page and its report APIs require a signed-in user with the `admin` role. New registrations receive the `user` role; promote trusted accounts manually from the MongoDB shell:
+
+```javascript
+db.users.updateOne(
+  { email: "admin@example.com" },
+  { $set: { role: "admin" } }
+);
+```
+
+The activity report filters the existing `activity_logs` collection by its `createdAt` field. Start and end dates are UTC calendar days and both days are included. The report provides paginated records, date-range totals, and a streaming CSV export. Export columns omit email addresses, IP addresses, and browser details. Both the report and CSV endpoint enforce administrator authorization on the server.
+
 ## Practical 8: Performance Optimization and Lazy Loading
 
 ### Objective
@@ -202,4 +215,3 @@ Practical 8 was implemented by adding route-based code splitting with `React.laz
 <img width="959" height="477" alt="Screenshot 2026-08-03 213827" src="https://github.com/user-attachments/assets/b639f265-0075-4cbd-99b0-69ac948b2b90" />
 
 <img width="959" height="442" alt="Screenshot 2026-08-03 213811" src="https://github.com/user-attachments/assets/3ccdcdcc-de3d-4bc5-a3a0-22caf38d363d" />
-
