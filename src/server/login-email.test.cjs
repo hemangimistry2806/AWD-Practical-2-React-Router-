@@ -75,6 +75,39 @@ test("invalid credentials do not send a login email", async () => {
     assert.equal(sentMessages.length, 0);
 });
 
+test("missing or invalid SMTP settings skip email without failing login", async () => {
+    const originalHost = process.env.SMTP_HOST;
+    const originalPort = process.env.SMTP_PORT;
+    const originalSecure = process.env.SMTP_SECURE;
+
+    try {
+        process.env.SMTP_HOST = "";
+        let response = await login("correct-password");
+        assert.equal(response.status, 200);
+        assert.equal(sentMessages.length, 0);
+
+        process.env.SMTP_HOST = originalHost;
+        process.env.SMTP_PORT = "invalid";
+        response = await login("correct-password");
+        assert.equal(response.status, 200);
+        assert.equal(sentMessages.length, 0);
+
+        process.env.SMTP_PORT = originalPort;
+        process.env.SMTP_SECURE = "sometimes";
+        response = await login("correct-password");
+        assert.equal(response.status, 200);
+        assert.equal(sentMessages.length, 0);
+    } finally {
+        process.env.SMTP_HOST = originalHost;
+        process.env.SMTP_PORT = originalPort;
+        if (originalSecure === undefined) {
+            delete process.env.SMTP_SECURE;
+        } else {
+            process.env.SMTP_SECURE = originalSecure;
+        }
+    }
+});
+
 test("successful login sends one confirmation only to the registered email", async () => {
     const response = await login("correct-password");
     const payload = await response.json();

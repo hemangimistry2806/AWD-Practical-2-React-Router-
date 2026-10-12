@@ -58,12 +58,12 @@ function AdminReports() {
     };
   }, []);
 
-  const fetchReport = async (page = 1) => {
-    if (!startDate || !endDate) {
+  const fetchReport = async (page = 1, reportStartDate = startDate, reportEndDate = endDate) => {
+    if (!reportStartDate || !reportEndDate) {
       setError("Choose both a start date and an end date.");
       return;
     }
-    if (startDate > endDate) {
+    if (reportStartDate > reportEndDate) {
       setError("Start date must not be later than end date.");
       return;
     }
@@ -71,7 +71,11 @@ function AdminReports() {
     setLoading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ startDate, endDate, page: String(page) });
+      const params = new URLSearchParams({
+        startDate: reportStartDate,
+        endDate: reportEndDate,
+        page: String(page)
+      });
       const response = await fetch(`${API_URL}/admin/reports/activity?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -91,7 +95,10 @@ function AdminReports() {
     setDownloading(true);
     setError("");
     try {
-      const params = new URLSearchParams({ startDate, endDate });
+      const params = new URLSearchParams({
+        startDate: report.startDate,
+        endDate: report.endDate
+      });
       const response = await fetch(`${API_URL}/admin/reports/activity.csv?${params}`, {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -101,7 +108,7 @@ function AdminReports() {
       const downloadUrl = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = downloadUrl;
-      link.download = `activity-report-${startDate}-to-${endDate}.csv`;
+      link.download = `activity-report-${report.startDate}-to-${report.endDate}.csv`;
       link.click();
       URL.revokeObjectURL(downloadUrl);
     } catch (requestError) {
@@ -203,7 +210,7 @@ function AdminReports() {
             <button
               className="secondary-task-button"
               type="button"
-              onClick={() => fetchReport(report.page - 1)}
+              onClick={() => fetchReport(report.page - 1, report.startDate, report.endDate)}
               disabled={loading || report.page <= 1}
             >
               Previous
@@ -214,7 +221,7 @@ function AdminReports() {
             <button
               className="secondary-task-button"
               type="button"
-              onClick={() => fetchReport(report.page + 1)}
+              onClick={() => fetchReport(report.page + 1, report.startDate, report.endDate)}
               disabled={loading || report.page >= report.totalPages}
             >
               Next

@@ -146,9 +146,12 @@ test("report API rejects unauthenticated and non-admin users", async () => {
     const path = "/api/admin/reports/activity?startDate=2026-10-01&endDate=2026-10-31";
     const unauthenticated = await reportRequest(path);
     const regularUser = await reportRequest(path, regularToken);
+    const forgedRoleToken = jwt.sign({ id: user._id, role: "admin" }, process.env.JWT_SECRET);
+    const forgedRole = await reportRequest(path, forgedRoleToken);
 
     assert.equal(unauthenticated.status, 401);
     assert.equal(regularUser.status, 403);
+    assert.equal(forgedRole.status, 403);
 });
 
 test("activity report validates dates and includes both UTC calendar-day boundaries", async () => {
@@ -203,4 +206,38 @@ test("empty report results are successful and CSV export is admin-only", async (
     assert.match(csvText, /BEGIN/);
     assert.match(csvText, /END/);
     assert.doesNotMatch(csvText, /OUTSIDE|private@example\.test/);
+});
+
+test("activity report paginates records while totals cover the full date range", async () => {
+    await ActivityLog.create(Array.from({ length: 51 }, (_, index) => ({
+        action: "PAGINATED",
+        userName: `Report row ${index}`,
+        createdAt: new Date("2040-10-12T12:00:00.000Z")
+    })));
+
+    const firstPage = await reportRequest(
+        "/api/admin/reports/activity?startDate=2040-10-12&endDate=2040-10-12&page=1",
+        adminToken
+    );
+    const firstPageResult = await firstPage.json();
+    const secondPage = await reportRequest(
+        "/api/admin/reports/activity?startDate=2040-10-12&endDate=2040-10-12&page=2",
+        adminToken
+    );
+    const secondPageResult = await secondPage.json();
+    const invalidPage = await reportRequest(
+        "/api/admin/reports/activity?startDate=2040-10-12&endDate=2040-10-12&page=0",
+        adminToken
+    );
+
+    assert.equal(firstPage.status, 200);
+    assert.equal(firstPageResult.total, 51);
+    assert.equal(firstPageResult.totalPages, 2);
+    assert.equal(firstPageResult.pageSize, 50);
+    assert.equal(firstPageResult.records.length, 50);
+    assert.deepEqual(firstPageResult.actionTotals, [{ action: "PAGINATED", count: 51 }]);
+    assert.equal(secondPage.status, 200);
+    assert.equal(secondPageResult.page, 2);
+    assert.equal(secondPageResult.records.length, 1);
+    assert.equal(invalidPage.status, 400);
 });

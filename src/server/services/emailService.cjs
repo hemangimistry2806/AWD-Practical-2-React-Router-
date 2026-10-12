@@ -19,17 +19,33 @@ const configuredRecipients = () => ({
 const getTransporter = () => {
     if (transporter) return transporter;
 
-    if (!process.env.SMTP_HOST || !process.env.SMTP_PORT || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    const host = String(process.env.SMTP_HOST || "").trim();
+    const rawPort = String(process.env.SMTP_PORT || "").trim();
+    const username = String(process.env.SMTP_USER || "").trim();
+    const password = process.env.SMTP_PASS || "";
+    const rawSecure = String(process.env.SMTP_SECURE || "false").trim().toLowerCase();
+
+    if (!host || !rawPort || !username || !password) {
+        return null;
+    }
+
+    const port = Number(rawPort);
+    if (!/^\d+$/.test(rawPort) || !Number.isInteger(port) || port < 1 || port > 65535) {
+        console.warn("Email skipped: SMTP_PORT must be an integer between 1 and 65535");
+        return null;
+    }
+    if (rawSecure !== "true" && rawSecure !== "false") {
+        console.warn("Email skipped: SMTP_SECURE must be true or false");
         return null;
     }
 
     transporter = nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
-        port: Number(process.env.SMTP_PORT),
-        secure: String(process.env.SMTP_SECURE || "false").toLowerCase() === "true",
+        host,
+        port,
+        secure: rawSecure === "true",
         auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
+            user: username,
+            pass: password
         }
     });
 

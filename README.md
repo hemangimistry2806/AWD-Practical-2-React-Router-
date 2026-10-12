@@ -54,7 +54,7 @@ To use another MongoDB instance, copy `.env.example` to `.env` and change `MONGO
 
 ### Email notifications
 
-Email notifications use Nodemailer with React Email templates. Configure these backend-only variables in `.env`:
+Email notifications use Nodemailer with React Email templates. Copy `.env.example` to `.env` in the project root, then configure these backend-only variables:
 
 ```env
 SMTP_HOST=
@@ -68,7 +68,7 @@ MAIL_CC=
 MAIL_BCC=
 ```
 
-`MAIL_TO`, `MAIL_CC`, and `MAIL_BCC` accept comma-separated additional recipients for task and logout notifications. Login confirmations are sent only to the authenticated account's email address from MongoDB. Keep `.env` private; SMTP credentials are never exposed to the React frontend. If SMTP variables are missing or sending fails, the server logs the email problem and the authentication/task API operation still succeeds.
+`SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, and `SMTP_PASS` are required to send mail. `SMTP_PORT` must be an integer from 1 to 65535, and `SMTP_SECURE` must be `true` or `false`; use the TLS mode required by your SMTP provider (commonly `true` for implicit TLS on port 465 and `false` for STARTTLS on port 587). `MAIL_FROM` is optional and defaults to `SMTP_USER`. `MAIL_TO`, `MAIL_CC`, and `MAIL_BCC` are optional comma-separated additional recipients for task and logout notifications; login confirmations are sent only to the authenticated account's email address from MongoDB. Keep `.env` private; SMTP credentials are never exposed to the React frontend. If SMTP variables are missing, invalid, or sending fails, the server logs a generic email problem and the authentication/task API operation still succeeds.
 
 Run the project with:
 
@@ -77,11 +77,11 @@ npm install
 npm run dev
 ```
 
-The API runs on port `5000` and Vite runs on port `5173`. Task-created, task-completed, task-pending transition, login, and logout notifications are sent asynchronously. Pending notifications are sent only when a task changes into `pending`, avoiding duplicate notifications for repeated pending updates.
+The API runs on port `5000` and Vite runs on port `5173`. Task-created, task-completed, task-pending transition, login, and logout notifications are sent asynchronously. Pending notifications are sent only when a task changes into `pending`, avoiding duplicate notifications for repeated pending updates. The backend can run without SMTP configuration; email sending is skipped until the required SMTP values are set.
 
 ### Administrator activity reports
 
-The `/admin/reports` page and its report APIs require a signed-in user with the `admin` role. New registrations receive the `user` role; promote trusted accounts manually from the MongoDB shell:
+The `/admin/reports` page and its report APIs require a signed-in user with the `admin` role. New registrations receive the `user` role; promote only the selected trusted account manually from the MongoDB shell:
 
 ```javascript
 db.users.updateOne(
@@ -91,6 +91,12 @@ db.users.updateOne(
 ```
 
 The activity report filters the existing `activity_logs` collection by its `createdAt` field. Start and end dates are UTC calendar days and both days are included. The report provides paginated records, date-range totals, and a streaming CSV export. Export columns omit email addresses, IP addresses, and browser details. Both the report and CSV endpoint enforce administrator authorization on the server.
+
+After signing in as an administrator, open **Admin reports** from the Tasks page (or navigate to `/admin/reports`). Choose both dates, select **Generate report**, and use **Download CSV** to export the same date range. Run the automated email and report integration tests with:
+
+```bash
+npm test
+```
 
 ## Practical 8: Performance Optimization and Lazy Loading
 
