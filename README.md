@@ -52,6 +52,33 @@ The Excel button downloads an Excel-compatible CSV file. The PDF button opens th
 
 To use another MongoDB instance, copy `.env.example` to `.env` and change `MONGO_URI`.
 
+### Email notifications
+
+Email notifications use Nodemailer with React Email templates. Configure these backend-only variables in `.env`:
+
+```env
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASS=
+MAIL_FROM=
+MAIL_TO=
+MAIL_CC=
+MAIL_BCC=
+```
+
+`MAIL_TO`, `MAIL_CC`, and `MAIL_BCC` accept comma-separated additional recipients for task and logout notifications. Login confirmations are sent only to the authenticated account's email address from MongoDB. Keep `.env` private; SMTP credentials are never exposed to the React frontend. If SMTP variables are missing or sending fails, the server logs the email problem and the authentication/task API operation still succeeds.
+
+Run the project with:
+
+```bash
+npm install
+npm run dev
+```
+
+The API runs on port `5000` and Vite runs on port `5173`. Task-created, task-completed, task-pending transition, login, and logout notifications are sent asynchronously. Pending notifications are sent only when a task changes into `pending`, avoiding duplicate notifications for repeated pending updates.
+
 ## Practical 8: Performance Optimization and Lazy Loading
 
 ### Objective

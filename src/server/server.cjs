@@ -10,6 +10,7 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const ActivityLog = require("./models/ActivityLog.cjs");
 const Task = require("./models/Task.cjs");
 const User = require("./models/User.cjs");
+const { sendLoginEmail } = require("./services/emailService.cjs");
 
 const app = express();
 const PORT = Number(process.env.PORT || 5000);
@@ -155,6 +156,7 @@ app.post("/api/auth/login", async (req, res) => {
 
         const token = jwt.sign({ id: user._id }, JWT_SECRET, { expiresIn: "1h" });
         await recordActivity({ req, user, action: "AUTH_LOGIN", details: "Successful login" });
+        void sendLoginEmail(user, req);
         res.json({ token, user: publicUser(user) });
     } catch (error) {
         res.status(400).json({ message: "Unable to log in", error: error.message });
