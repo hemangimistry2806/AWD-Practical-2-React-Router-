@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently \"npm run server\" \"vite --host 0.0.0.0\"",
     "server": "node src/server/server.cjs",
+    "test": "node --test src/server/login-email.test.cjs src/server/server.test.cjs",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
