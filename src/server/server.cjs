@@ -1,6 +1,8 @@
 require("dotenv").config();
 
 const bcrypt = require("bcryptjs");
+const crypto = require("crypto");
+const { EventEmitter } = require("events");
 const express = require("express");
 const fs = require("fs");
 const jwt = require("jsonwebtoken");
@@ -10,9 +12,16 @@ const { MongoMemoryServer } = require("mongodb-memory-server");
 const ActivityLog = require("./models/ActivityLog.cjs");
 const Task = require("./models/Task.cjs");
 const User = require("./models/User.cjs");
-const { sendLoginEmail } = require("./services/emailService.cjs");
+const {
+    sendLoginEmail,
+    sendLogoutEmail,
+    sendTaskCompletedEmail,
+    sendTaskCreatedEmail,
+    sendTaskPendingEmail
+} = require("./services/emailService.cjs");
 
 const app = express();
+const taskEventEmitter = new EventEmitter();
 const PORT = Number(process.env.PORT || 5000);
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/taskdb";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-this-secret";
@@ -21,6 +30,24 @@ const LOG_FILE = path.join(LOG_DIRECTORY, "task-audit.txt");
 let memoryMongo;
 
 fs.mkdirSync(LOG_DIRECTORY, { recursive: true });
+
+const emitTaskNotification = (eventName, { task, user }) => {
+    const eventLabel = eventName === "task:created" ? "Task-created" : "Task-deleted";
+    const title = JSON.stringify(task.title);
+    const assignedUser = JSON.stringify(user?.username || "Unassigned");
+    const startedAt = new Date().toISOString();
+
+    console.log(`[${startedAt}] ${eventLabel} notification queued: title=${title} | assignedUser=${assignedUser}`);
+    console.log(`[${startedAt}] Simulated background delay: 2000ms`);
+
+    setTimeout(() => {
+        const completedAt = new Date().toISOString();
+        console.log(`[${completedAt}] ${eventLabel} notification completed: title=${title} | assignedUser=${assignedUser} | timestamp=${completedAt}`);
+    }, 2000);
+};
+
+taskEventEmitter.on("task:created", (event) => emitTaskNotification("task:created", event));
+taskEventEmitter.on("task:deleted", (event) => emitTaskNotification("task:deleted", event));
 
 app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -212,12 +239,70 @@ app.post("/api/auth/login", async (req, res) => {
     }
 });
 
+app.post("/api/auth/forgot-password", async (req, res) => {
+    const email = String(req.body.email || "").trim().toLowerCase();
+
+    try {
+        const user = await User.findOne({ email });
+        if (!user) {
+            return res.status(404).json({ message: "No account found for that email" });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        user.resetPasswordToken = resetToken;
+        user.resetPasswordExpires = new Date(Date.now() + 15 * 60 * 1000);
+        user.passwordResetRequests += 1;
+        await user.save();
+        await recordActivity({
+            req,
+            user,
+            action: "AUTH_PASSWORD_RESET_REQUEST",
+            details: `Password reset requested (${user.passwordResetRequests} total requests)`
+        });
+
+        res.json({ message: "Reset token generated", resetToken });
+    } catch (error) {
+        res.status(400).json({ message: "Unable to request password reset", error: error.message });
+    }
+});
+
+app.post("/api/auth/reset-password", async (req, res) => {
+    const resetToken = String(req.body.resetToken || "");
+    const password = String(req.body.password || "");
+
+    if (!resetToken || password.length < 6) {
+        return res.status(400).json({ message: "Reset token and a 6-character password are required" });
+    }
+
+    try {
+        const user = await User.findOne({
+            resetPasswordToken: resetToken,
+            resetPasswordExpires: { $gt: new Date() }
+        });
+
+        if (!user) {
+            return res.status(400).json({ message: "Reset token is invalid or expired" });
+        }
+
+        user.password = await bcrypt.hash(password, 10);
+        user.resetPasswordToken = undefined;
+        user.resetPasswordExpires = undefined;
+        await user.save();
+        await recordActivity({ req, user, action: "AUTH_PASSWORD_RESET_SUCCESS", details: "Password reset successfully" });
+
+        res.json({ message: "Password reset successfully" });
+    } catch (error) {
+        res.status(400).json({ message: "Unable to reset password", error: error.message });
+    }
+});
+
 app.get("/api/auth/me", requireAuth, (req, res) => {
     res.json({ user: publicUser(req.user) });
 });
 
 app.post("/api/auth/logout", requireAuth, async (req, res) => {
     await recordActivity({ req, user: req.user, action: "AUTH_LOGOUT", details: "Successful logout" });
+    void sendLogoutEmail(req.user);
     res.json({ message: "Logged out" });
 });
 
@@ -238,6 +323,8 @@ app.post("/api/tasks", requireAuth, validateTask, async (req, res) => {
         const task = await Task.create({
             title,
             description: req.body.description || "",
+            priority: req.body.priority || "medium",
+            dueDate: req.body.dueDate || undefined,
             status,
             completed: status === "completed"
         });
@@ -250,7 +337,11 @@ app.post("/api/tasks", requireAuth, validateTask, async (req, res) => {
             taskTitle: task.title,
             details: `Status: ${task.status}`
         });
+        void sendTaskCreatedEmail(req.user, task);
+        const responseTimestamp = new Date().toISOString();
         res.status(201).json(task);
+        console.log(`[${responseTimestamp}] API response: POST /api/tasks status=201 taskTitle=${JSON.stringify(task.title)}`);
+        taskEventEmitter.emit("task:created", { task, user: req.user });
     } catch (error) {
         res.status(400).json({ message: "Unable to create task", error: error.message });
     }
@@ -260,21 +351,27 @@ app.put("/api/tasks/:id", requireAuth, validateTask, async (req, res) => {
     try {
         const title = req.body.title;
         const status = req.body.status || "pending";
+        const existingTask = await Task.findById(req.params.id);
 
-        const task = await Task.findByIdAndUpdate(
-            req.params.id,
-            {
-                title,
-                description: req.body.description || "",
-                status,
-                completed: status === "completed"
-            },
-            { new: true, runValidators: true }
-        );
-
-        if (!task) {
+        if (!existingTask) {
             return res.status(404).json({ message: "Task not found" });
         }
+
+        const previousStatus = existingTask.status;
+        existingTask.title = title;
+        existingTask.description = req.body.description || "";
+        if (req.body.priority !== undefined) {
+            existingTask.priority = req.body.priority;
+        }
+        if (req.body.dueDate !== undefined) {
+            existingTask.dueDate = req.body.dueDate || undefined;
+        }
+        existingTask.status = status;
+        existingTask.completed = status === "completed";
+        const wasCompleted = previousStatus !== "completed" && status === "completed";
+        const wasPending = previousStatus !== "pending" && status === "pending";
+        await existingTask.save();
+        const task = existingTask;
 
         await recordActivity({
             req,
@@ -284,6 +381,11 @@ app.put("/api/tasks/:id", requireAuth, validateTask, async (req, res) => {
             taskTitle: task.title,
             details: `Status: ${task.status}`
         });
+        if (wasCompleted && previousStatus !== "completed") {
+            void sendTaskCompletedEmail(req.user, task);
+        } else if (wasPending && previousStatus !== "pending") {
+            void sendTaskPendingEmail(req.user, task);
+        }
         res.json(task);
     } catch (error) {
         res.status(400).json({ message: "Unable to update task", error: error.message });
@@ -319,7 +421,10 @@ app.delete("/api/tasks/:id", requireAuth, async (req, res) => {
             console.error(`Text audit log could not be saved: ${logError.message}`);
         }
 
+        const responseTimestamp = new Date().toISOString();
         res.json({ message: "Task deleted" });
+        console.log(`[${responseTimestamp}] API response: DELETE /api/tasks/${task._id} status=200 taskTitle=${JSON.stringify(task.title)}`);
+        taskEventEmitter.emit("task:deleted", { task, user: req.user });
     } catch (error) {
         res.status(400).json({ message: "Unable to delete task", error: error.message });
     }

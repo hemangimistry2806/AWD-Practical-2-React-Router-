@@ -23,6 +23,12 @@ const userSchema = new mongoose.Schema({
         enum: ["user", "admin"],
         default: "user"
     },
+    resetPasswordToken: String,
+    resetPasswordExpires: Date,
+    passwordResetRequests: {
+        type: Number,
+        default: 0
+    },
     createdAt: {
         type: Date,
         default: Date.now

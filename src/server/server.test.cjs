@@ -241,3 +241,55 @@ test("activity report paginates records while totals cover the full date range",
     assert.equal(secondPageResult.records.length, 1);
     assert.equal(invalidPage.status, 400);
 });
+
+test("task notifications run after the API response with a two-second delay", async () => {
+    const output = [];
+    const originalLog = console.log;
+    console.log = (...args) => output.push(args.join(" "));
+
+    const waitForLine = async (pattern) => {
+        const deadline = Date.now() + 3500;
+        while (Date.now() < deadline) {
+            const line = output.find((entry) => pattern.test(entry));
+            if (line) return line;
+            await new Promise((resolve) => setTimeout(resolve, 10));
+        }
+        throw new Error(`Timed out waiting for log matching ${pattern}`);
+    };
+
+    const checkResponseBeforeNotification = (responseLine, completedLine) => {
+        const responseTimestamp = Date.parse(responseLine.match(/^\[([^\]]+)\]/)[1]);
+        const completedTimestamp = Date.parse(completedLine.match(/^\[([^\]]+)\]/)[1]);
+        assert.ok(completedTimestamp - responseTimestamp >= 1900);
+    };
+    const authorization = { Authorization: ["Bearer", regularToken].join(" ") };
+
+    try {
+        const createdResponse = await fetch(`${baseUrl}/api/tasks`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json", ...authorization },
+            body: JSON.stringify({ title: "Practical 10 event test" })
+        });
+        const createdTask = await createdResponse.json();
+        const createResponseLine = await waitForLine(/API response: POST \/api\/tasks status=201/);
+        const createdNotificationLine = await waitForLine(/Task-created notification completed: title="Practical 10 event test"/);
+
+        assert.equal(createdResponse.status, 201);
+        assert.match(createdNotificationLine, /assignedUser="Test User"/);
+        assert.match(output.join("\n"), /Simulated background delay: 2000ms/);
+        checkResponseBeforeNotification(createResponseLine, createdNotificationLine);
+
+        const deletedResponse = await fetch(`${baseUrl}/api/tasks/${createdTask._id}`, {
+            method: "DELETE",
+            headers: authorization
+        });
+        assert.equal(deletedResponse.status, 200);
+        const deleteResponseLine = await waitForLine(/API response: DELETE .* status=200/);
+        const deletedNotificationLine = await waitForLine(/Task-deleted notification completed: title="Practical 10 event test"/);
+
+        assert.match(deletedNotificationLine, /assignedUser="Test User"/);
+        checkResponseBeforeNotification(deleteResponseLine, deletedNotificationLine);
+    } finally {
+        console.log = originalLog;
+    }
+});

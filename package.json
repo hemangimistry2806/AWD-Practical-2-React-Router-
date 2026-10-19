@@ -19,6 +19,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongodb-memory-server": "^10.2.0",
     "mongoose": "^9.9.1",
+    "node-cache": "^5.1.2",
     "nodemailer": "^10.0.10",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

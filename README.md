@@ -41,10 +41,26 @@ npm install
 npm run dev
 ```
 
+## Practical 11: Run with Docker Compose
+
+Docker Desktop or Docker Engine with the Compose plugin must be installed and running. From the project root, build and start the complete stack with:
+
+```bash
+docker compose up --build
+```
+
+The image build uses Node 22 because this project's Vite 8 requires Node 20.19 or newer.
+
+Open the frontend at <http://localhost:5173>. The API is available at <http://localhost:5000>, and MongoDB is published on port `27017`. Compose starts MongoDB first, waits for it to become healthy before starting the backend, and then waits for the backend before starting the frontend. Nginx serves the production React build and forwards `/api` requests to the `backend` service.
+
+Stop the stack with `Ctrl+C`; run `docker compose down` to remove its containers. MongoDB data is kept in the named `mongo-data` volume, so it remains available after containers are recreated. To also delete the stored database, run `docker compose down --volumes`.
+
+Optional email settings can be provided through environment variables or a root `.env` file. Set a non-default `JWT_SECRET` for deployments beyond local coursework.
+
 ## MongoDB Tasks
 
 The `/tasks` page stores tasks in the local MongoDB database `taskdb`, collection `tasks`.
-The default connection is `mongodb://127.0.0.1:27017/taskdb`, so start the MongoDB service before running the project. `npm run dev` starts both the Express API on port `5000` and the React app on port `5173`.
+For local development outside Docker, the default connection is `mongodb://127.0.0.1:27017/taskdb`, so start the MongoDB service before running the project. `npm run dev` starts both the Express API on port `5000` and the React app on port `5173`. In Docker Compose, the backend connects to MongoDB using the service address `mongodb://mongodb:27017/taskdb`.
 
 Deleted task audit entries are appended to `logs/task-audit.txt`.
 Authentication creates the MongoDB collections `users` and `activity_logs`. The task API requires a valid signed-in session, and the Activity button shows login, logout, create, update, and delete history.
@@ -221,3 +237,17 @@ Practical 8 was implemented by adding route-based code splitting with `React.laz
 <img width="959" height="477" alt="Screenshot 2026-08-03 213827" src="https://github.com/user-attachments/assets/b639f265-0075-4cbd-99b0-69ac948b2b90" />
 
 <img width="959" height="442" alt="Screenshot 2026-08-03 213811" src="https://github.com/user-attachments/assets/3ccdcdcc-de3d-4bc5-a3a0-22caf38d363d" />
+
+## Practical 10: EventEmitter Background Processing
+
+Task creation and deletion emit background notifications. Each notification logs the task title and user, waits for the simulated two-second processing delay, and then logs its completion timestamp.
+
+### Task Created Event Output
+
+![Task Created Event Output](screenshots/practical-10/task-created-output.png)
+
+### Task Deleted Event Output
+
+![Task Deleted Event Output](screenshots/practical-10/task-deleted-output.png)
+
+The create API response was timestamped at `2026-10-18T04:57:38.044Z`, before its notification completed at `2026-10-18T04:57:40.049Z` (2.005 seconds later). The delete API response was timestamped at `2026-10-18T04:57:41.130Z`, before its notification completed at `2026-10-18T04:57:43.145Z` (2.015 seconds later). These captured timestamps demonstrate that the API responds before background notification processing finishes.
