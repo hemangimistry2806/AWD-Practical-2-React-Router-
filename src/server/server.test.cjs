@@ -90,6 +90,16 @@ const reportRequest = (path, token) => fetch(`${baseUrl}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
 });
 
+test("GET /api/tasks returns 200 with a task list", async () => {
+    const response = await fetch(`${baseUrl}/api/tasks`, {
+        headers: { Authorization: `Bearer ${regularToken}` }
+    });
+    const tasks = await response.json();
+
+    assert.equal(response.status, 200);
+    assert.ok(Array.isArray(tasks));
+});
+
 test("invalid credentials do not send a login email", async () => {
     const response = await login("incorrect-password");
 

@@ -2,6 +2,8 @@
 
 A React-based student portfolio website developed for **Practical 2** demonstrating **React Router** and **State Management using useState**.
 
+[![CI Pipeline](https://github.com/hemangimistry2806/AWD-Practical-2-React-Router-/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/hemangimistry2806/AWD-Practical-2-React-Router-/actions/workflows/ci.yml)
+
 ## Technologies Used
 
 * React
@@ -113,6 +115,32 @@ After signing in as an administrator, open **Admin reports** from the Tasks page
 ```bash
 npm test
 ```
+
+## Practical 12: CI Pipeline with GitHub Actions
+
+The workflow at `.github/workflows/ci.yml` runs on every push to `main`. It checks out the repository, sets up Node.js 22, runs the required `npm install` step, and runs `npm test`. A failed install or test makes the job fail; a successful run reports a green check in the repository's **Actions** tab and on the commit. The test suite includes an authenticated `GET /api/tasks` integration test as well as the existing authentication and reports tests.
+
+This practical demonstrates **Continuous Integration (CI)**: changes are integrated and checked automatically. Continuous Deployment (CD) would additionally publish the tested application to an environment, which this workflow does not do.
+
+Automated checks on each push provide fast feedback while a change is small, rather than relying on a developer to remember a manual pre-release test. If a test path or command is incorrect, the test step still fails, but the log reports a missing file/module or invalid command rather than an assertion failure. An assertion failure means the test ran and found an unexpected result.
+
+### Reproducing a failing and passing run
+
+To demonstrate a genuine test failure, temporarily change the expected status in the `GET /api/tasks` test from `200` to `201`, then run `npm test`. The test step exits unsuccessfully and reports the assertion mismatch. Restore the expected status to `200` and rerun `npm test` to get a passing result. Do not leave the broken expectation committed. After pushing this workflow to `main`, use the Actions tab to see the GitHub-hosted run and its job logs.
+
+The images below record the local test-run failure and corrected pass. They are local test output, not screenshots of hosted GitHub Actions runs; those become available after the workflow is pushed.
+
+#### Deliberately broken assertion
+
+![Local test output showing an assertion failure](screenshots/practical-12/test-failure.png)
+
+#### Corrected test suite
+
+![Local test output showing the corrected passing test suite](screenshots/practical-12/test-pass.png)
+
+### CI and CD
+
+CI automatically installs dependencies and verifies code changes as they are pushed. CD takes a verified build and delivers it to a staging or production environment. This workflow covers CI only; it does not deploy the application.
 
 ## Practical 8: Performance Optimization and Lazy Loading
 
