@@ -32,6 +32,8 @@ function Tasks() {
   const [showInput, setShowInput] = useState(false);
   const [task, setTask] = useState("");
   const [description, setDescription] = useState("");
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [aiMessage, setAiMessage] = useState("");
   const [priority, setPriority] = useState("medium");
   const [dueDate, setDueDate] = useState("");
   const [taskStatus, setTaskStatus] = useState("pending");
@@ -232,6 +234,39 @@ function Tasks() {
     }
   };
 
+  const generateDescription = async () => {
+    const title = task.trim();
+    if (!title) {
+      setAiMessage("Enter a task title before requesting a suggestion.");
+      return;
+    }
+
+    setGeneratingDescription(true);
+    setAiMessage("");
+    try {
+      const response = await requestApi(`${API_URL}/ai/generate-description`, {
+        method: "POST",
+        body: JSON.stringify({ title })
+      });
+      const result = await response.json();
+      if (!response.ok) {
+        throw new Error(result.message || "Unable to generate a description");
+      }
+
+      if (result.fallback) {
+        setAiMessage(result.message);
+        return;
+      }
+
+      setDescription(result.description);
+      setAiMessage("AI-generated suggestion added. Review and edit it before saving.");
+    } catch (requestError) {
+      setAiMessage(requestError.message || "AI suggestions are unavailable. You can write the description yourself.");
+    } finally {
+      setGeneratingDescription(false);
+    }
+  };
+
   const deleteTask = async (currentTask) => {
     const confirmation = await Swal.fire({
       title: "Delete this task?",
@@ -263,6 +298,7 @@ function Tasks() {
   const editTask = (currentTask) => {
     setTask(currentTask.title);
     setDescription(currentTask.description || "");
+    setAiMessage("");
     setPriority(currentTask.priority || "medium");
     setDueDate(currentTask.dueDate ? currentTask.dueDate.slice(0, 10) : "");
     setTaskStatus(getTaskStatus(currentTask));
@@ -411,6 +447,7 @@ function Tasks() {
             setEditingId(null);
             setTask("");
             setDescription("");
+            setAiMessage("");
             setPriority("medium");
             setDueDate("");
             setTaskStatus("pending");
@@ -427,14 +464,34 @@ function Tasks() {
             type="text"
             placeholder="Task title"
             value={task}
-            onChange={(event) => setTask(event.target.value)}
+            onChange={(event) => {
+              setTask(event.target.value);
+              setAiMessage("");
+            }}
           />
           <input
             type="text"
             placeholder="Description (optional)"
             value={description}
-            onChange={(event) => setDescription(event.target.value)}
+            onChange={(event) => {
+              setDescription(event.target.value);
+              setAiMessage("");
+            }}
           />
+          <div className="ai-description-tools">
+            <button
+              className="secondary-task-button"
+              type="button"
+              onClick={generateDescription}
+              disabled={generatingDescription}
+            >
+              {generatingDescription ? "Generating..." : "Generate description"}
+            </button>
+            <span className="ai-disclaimer">
+              AI-generated suggestion: review and edit before saving. Do not include sensitive information in the task title.
+            </span>
+            {aiMessage && <p className="ai-message" role="status">{aiMessage}</p>}
+          </div>
           <select value={priority} onChange={(event) => setPriority(event.target.value)}>
             <option value="low">Low priority</option>
             <option value="medium">Medium priority</option>

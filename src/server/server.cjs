@@ -19,14 +19,17 @@ const {
     sendTaskCreatedEmail,
     sendTaskPendingEmail
 } = require("./services/emailService.cjs");
+const { generateTaskDescription } = require("./services/aiService.cjs");
 
 const app = express();
 const taskEventEmitter = new EventEmitter();
 const PORT = Number(process.env.PORT || 5000);
 const MONGO_URI = process.env.MONGO_URI || "mongodb://127.0.0.1:27017/taskdb";
 const JWT_SECRET = process.env.JWT_SECRET || "dev-only-change-this-secret";
+const AI_REQUEST_INTERVAL_MS = 60 * 1000;
 const LOG_DIRECTORY = path.join(__dirname, "..", "..", "logs");
 const LOG_FILE = path.join(LOG_DIRECTORY, "task-audit.txt");
+const aiRequestTimestamps = new Map();
 let memoryMongo;
 
 fs.mkdirSync(LOG_DIRECTORY, { recursive: true });
@@ -312,6 +315,42 @@ app.get("/api/tasks", requireAuth, async (req, res) => {
         res.json(tasks);
     } catch (error) {
         res.status(500).json({ message: "Unable to fetch tasks", error: error.message });
+    }
+});
+
+app.post("/api/ai/generate-description", requireAuth, async (req, res) => {
+    const title = String(req.body?.title || "").trim();
+    if (!title || title.length > 160) {
+        return res.status(400).json({ message: "A task title of 1 to 160 characters is required" });
+    }
+
+    const now = Date.now();
+    for (const [key, timestamp] of aiRequestTimestamps) {
+        if (now - timestamp >= AI_REQUEST_INTERVAL_MS) {
+            aiRequestTimestamps.delete(key);
+        }
+    }
+
+    const rateLimitKey = `${req.user._id}:${title.toLowerCase()}`;
+    const lastRequest = aiRequestTimestamps.get(rateLimitKey);
+    if (lastRequest && now - lastRequest < AI_REQUEST_INTERVAL_MS) {
+        return res.status(429).json({
+            message: "Please wait one minute before requesting another suggestion for this task."
+        });
+    }
+
+    aiRequestTimestamps.set(rateLimitKey, now);
+
+    try {
+        const description = await generateTaskDescription(title);
+        res.json({ description, fallback: false });
+    } catch {
+        console.warn("AI task description unavailable; continuing without a suggestion.");
+        res.json({
+            description: "",
+            fallback: true,
+            message: "AI suggestions are temporarily unavailable. You can write the description yourself."
+        });
     }
 });
 

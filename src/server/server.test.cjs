@@ -100,6 +100,109 @@ test("GET /api/tasks returns 200 with a task list", async () => {
     assert.ok(Array.isArray(tasks));
 });
 
+test("AI description endpoint requires authentication and a valid title", async () => {
+    const unauthenticated = await fetch(`${baseUrl}/api/ai/generate-description`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "Prepare project report" })
+    });
+    const missingTitle = await fetch(`${baseUrl}/api/ai/generate-description`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${regularToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "  " })
+    });
+    const longTitle = await fetch(`${baseUrl}/api/ai/generate-description`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${regularToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ title: "a".repeat(161) })
+    });
+
+    assert.equal(unauthenticated.status, 401);
+    assert.equal(missingTitle.status, 400);
+    assert.equal(longTitle.status, 400);
+});
+
+test("AI description endpoint returns an editable suggestion and limits requests per task", async () => {
+    const originalFetch = global.fetch;
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    const originalModel = process.env.OPENAI_MODEL;
+    let providerCalls = 0;
+    process.env.OPENAI_API_KEY = "test-only-api-key";
+    process.env.OPENAI_MODEL = "test-model";
+    global.fetch = async (url, options) => {
+        providerCalls += 1;
+        assert.equal(url, "https://api.openai.com/v1/chat/completions");
+        assert.equal(options.headers.Authorization, "Bearer test-only-api-key");
+        const body = JSON.parse(options.body);
+        assert.equal(body.model, "test-model");
+        assert.match(body.messages[1].content, /Prepare the weekly project report/);
+        return {
+            ok: true,
+            json: async () => ({
+                choices: [{ message: { content: "Collect updates and summarize project progress." } }]
+            })
+        };
+    };
+
+    try {
+        const response = await originalFetch(`${baseUrl}/api/ai/generate-description`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${regularToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Prepare the weekly project report" })
+        });
+        const result = await response.json();
+        const rateLimited = await originalFetch(`${baseUrl}/api/ai/generate-description`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${regularToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Prepare the weekly project report" })
+        });
+
+        assert.equal(response.status, 200);
+        assert.deepEqual(result, {
+            description: "Collect updates and summarize project progress.",
+            fallback: false
+        });
+        assert.equal(rateLimited.status, 429);
+        assert.equal(providerCalls, 1);
+    } finally {
+        global.fetch = originalFetch;
+        if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = originalApiKey;
+        if (originalModel === undefined) delete process.env.OPENAI_MODEL;
+        else process.env.OPENAI_MODEL = originalModel;
+    }
+});
+
+test("AI provider failures return a graceful fallback without exposing provider details", async () => {
+    const originalFetch = global.fetch;
+    const originalApiKey = process.env.OPENAI_API_KEY;
+    process.env.OPENAI_API_KEY = "invalid-test-key";
+    global.fetch = async () => ({
+        ok: false,
+        status: 401,
+        json: async () => ({ error: { message: "provider credentials must stay private" } })
+    });
+
+    try {
+        const response = await originalFetch(`${baseUrl}/api/ai/generate-description`, {
+            method: "POST",
+            headers: { Authorization: `Bearer ${regularToken}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ title: "Fallback description test" })
+        });
+        const result = await response.json();
+
+        assert.equal(response.status, 200);
+        assert.equal(result.description, "");
+        assert.equal(result.fallback, true);
+        assert.match(result.message, /write the description yourself/i);
+        assert.doesNotMatch(JSON.stringify(result), /provider credentials|invalid-test-key/);
+    } finally {
+        global.fetch = originalFetch;
+        if (originalApiKey === undefined) delete process.env.OPENAI_API_KEY;
+        else process.env.OPENAI_API_KEY = originalApiKey;
+    }
+});
+
 test("invalid credentials do not send a login email", async () => {
     const response = await login("incorrect-password");
 

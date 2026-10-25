@@ -142,6 +142,35 @@ The images below record the local test-run failure and corrected pass. They are 
 
 CI automatically installs dependencies and verifies code changes as they are pushed. CD takes a verified build and delivers it to a staging or production environment. This workflow covers CI only; it does not deploy the application.
 
+## Practical 13: AI Task Description Suggestions
+
+The task editor can request a short description for a task title. The React app sends the title to the authenticated backend endpoint `/api/ai/generate-description`; only the backend calls the OpenAI API. The response is added to the normal editable description field, where the user can review or change it before saving. A loading label is shown during the request, and each signed-in user can request a suggestion once per task title per minute.
+
+To enable live suggestions, add the provider key to the root `.env` file (copy `.env.example` first):
+
+```env
+OPENAI_API_KEY=your-openai-api-key
+OPENAI_MODEL=gpt-4o-mini
+```
+
+Restart the backend after changing environment settings. For Docker Compose, set the same variables in the shell or root `.env` before starting the stack; Compose passes them only to the backend container. The key is not part of the frontend bundle. Without a key, or if the provider fails or times out, the endpoint returns a clear fallback message and users can still write and save task descriptions normally.
+
+The key must remain private and must never be placed in React/Vite variables, browser code, screenshots, or committed files. Only the task title is sent to OpenAI; do not put passwords, personal or sensitive data, confidential work details, or other private information in a title sent for AI processing. AI-generated content may be inaccurate or unsuitable, so review it before use. The application does not require the AI feature to create or edit tasks.
+
+### Practical 13 output evidence
+
+The following UI captures show the suggestion and fallback states using mocked responses. Automated backend tests separately simulate an upstream authentication failure and verify the fallback without spending API credits or exposing a real key.
+
+#### Generated description and rate limit
+
+![AI task description suggestion and rate limit test output](screenshots/practical-13/ai-success.png)
+
+#### Graceful fallback on provider failure
+
+![AI provider failure handled with a graceful fallback](screenshots/practical-13/ai-fallback.png)
+
+Run `npm test` to verify the AI endpoint authentication, input validation, generated response, per-task rate limit, and graceful fallback cases.
+
 ## Practical 8: Performance Optimization and Lazy Loading
 
 ### Objective

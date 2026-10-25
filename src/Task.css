@@ -123,6 +123,30 @@
     background: var(--surface);
 }
 
+.ai-description-tools {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.ai-disclaimer,
+.ai-message {
+    margin: 0;
+    color: var(--text-muted);
+    font-size: 0.85rem;
+}
+
+.ai-message {
+    flex-basis: 100%;
+}
+
+.task-editor button:disabled {
+    cursor: wait;
+    opacity: 0.65;
+}
+
 .task-editor input,
 .task-editor select,
 .auth-form input {
